@@ -1,0 +1,106 @@
+/* Private user code ---------------------------------------------------------*/
+/* USER CODE BEGIN 0 */
+float fabs(float value)
+{
+    if (value < 0) 
+    {
+        return -value;
+    }
+}
+int adcValue;
+uint16_t readValue;
+volatile int encoderCount = 0, encoderDirection=0;
+int desiredPosition = 0, currentPosition = 0;
+int error=0, integral=0,derivative=0,lastError=0, motorSpeed = 0;
+int Kp=0, Ki=0, Kd=0; //values will be changed later
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == GPIO_PIN_0)
+  {
+    int B = HAL_GPIO_ReadPin(GPIOB, ENCODER_CHANNEL_B_PIN);
+
+    if (B == 1)
+    {
+      encoderCount++;
+      encoderDirection = 1; // Clockwise rotation
+    }
+    else
+    {
+      encoderCount--;
+      encoderDirection = -1; // Counterclockwise rotation
+    }
+  }
+}
+/* USER CODE END 0 */
+
+/**
+  * @brief  The application entry point.
+  * @retval int
+  */
+
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
+
+  /* USER CODE END 1 */
+
+  /* MCU Configuration--------------------------------------------------------*/
+
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
+
+
+  /* USER CODE BEGIN Init */
+
+  /* USER CODE END Init */
+
+  /* Configure the system clock */
+  SystemClock_Config();
+
+  /* USER CODE BEGIN SysInit */
+
+  /* USER CODE END SysInit */
+
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_ADC1_Init();
+  /* USER CODE BEGIN 2 */
+  HAL_ADC_Start(&hadc1);
+  /* USER CODE END 2 */
+
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    /* USER CODE END WHILE */
+	  HAL_ADC_PollForConversion(&hadc1,500);
+	  readValue = HAL_ADC_GetValue(&hadc1); //0-->4095
+	  //Calculate PID
+	  desiredPosition= readValue*360/4095; //assuming the encoder reads 0-->360 for 1 revolution
+	  error=encoderCount-desiredPosition;
+	   integral += error;
+	   derivative = error - lastError;
+	   motorSpeed = Kp * error + Ki * integral + Kd * derivative;
+	   lastError = error;
+	  
+	  if(encoderDirection==1)
+	  {
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 1); //5 and 7 are the direction pins in the driver (e.g, h-bridge)
+	  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, 0);
+	  }
+	  else if(encoderDirection==-1)
+	  {
+		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, 0);
+		  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_7, 1);
+	  }
+	  if(motorSpeed>65535)
+	  {
+		  motorSpeed=65535;
+	  }
+    /* USER CODE BEGIN 3 */
+	  //the last variable takes values within 0-->65535
+	  __HAL_TIM_SET_COMPARE(&htim4,TIM_CHANNEL_4, fabs(motorSpeed)); //attached to enable pin of the driver
+  /* USER CODE END 3 */
+  }
+}
